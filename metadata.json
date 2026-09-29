@@ -1,0 +1,8 @@
+{
+  "name": "Шпион",
+  "description": "Многопользовательская детективная игра для вечеринок: вычисляйте шпиона, задавайте хитрые вопросы и угадывайте секретные локации.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
