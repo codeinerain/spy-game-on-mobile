@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.spygame.model.Player
 import com.example.spygame.ui.theme.*
 
@@ -42,13 +43,15 @@ fun QuestionDialog(
     var selectedTargetId by remember { mutableStateOf(availableTargets.firstOrNull()?.id ?: "") }
     var questionText by remember { mutableStateOf("") }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss
+    ) {
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = SpyBg,
             border = androidx.compose.foundation.BorderStroke(1.dp, SpyLine),
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth(0.92f)
                 .testTag("question_dialog")
         ) {
             Column(

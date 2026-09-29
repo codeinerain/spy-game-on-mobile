@@ -50,10 +50,37 @@ class SpyGameEngine(
 
     fun initDefaultPlayers() {
         if (players.isEmpty()) {
-            players.add(Player(id = UUID.randomUUID().toString(), name = "Игрок 1", avatar = "🦊", isHost = true, ready = true))
-            players.add(Player(id = UUID.randomUUID().toString(), name = "Игрок 2", avatar = "🐼", isHost = false, ready = true))
-            players.add(Player(id = UUID.randomUUID().toString(), name = "Игрок 3", avatar = "🦉", isHost = false, ready = true))
-            players.add(Player(id = UUID.randomUUID().toString(), name = "Игрок 4 (Бот)", avatar = "🤖", isBot = true, ready = true))
+            setRosterSize(4, isSolo = false)
+        }
+    }
+
+    fun setRosterSize(targetCount: Int, isSolo: Boolean = false) {
+        val count = targetCount.coerceIn(GameLimits.MIN_PLAYERS, GameLimits.MAX_PLAYERS)
+        if (isSolo) {
+            players.clear()
+            players.add(Player(id = UUID.randomUUID().toString(), name = "Вы", avatar = "🦊", isHost = true, ready = true))
+            val botNames = listOf("Агент 007", "Шерлок", "Панда", "Фантом", "Энигма", "Сфинкс", "Невидимка", "Спецагент", "Сокол")
+            val botAvatars = listOf("🕶️", "🔍", "🐼", "🎭", "🕵️", "🦁", "🦉", "🐯", "🦅")
+            for (i in 1 until count) {
+                val name = botNames.getOrElse(i - 1) { "Бот $i" }
+                val avatar = botAvatars.getOrElse(i - 1) { "🤖" }
+                players.add(Player(id = UUID.randomUUID().toString(), name = name, avatar = avatar, isBot = true, ready = true))
+            }
+        } else {
+            while (players.size > count) {
+                players.removeAt(players.size - 1)
+            }
+            while (players.size < count) {
+                val idx = players.size
+                val defaultAvatar = GAME_AVATARS[idx % GAME_AVATARS.size]
+                players.add(Player(
+                    id = UUID.randomUUID().toString(),
+                    name = "Игрок ${idx + 1}",
+                    avatar = defaultAvatar,
+                    isHost = idx == 0,
+                    ready = true
+                ))
+            }
         }
     }
 
@@ -109,7 +136,9 @@ class SpyGameEngine(
 
         val pool = locationRepository.getPool(config.enabledCategoryIds)
         currentLocation = locationRepository.getRandomLocation(config.enabledCategoryIds) ?: pool.firstOrNull()
-        spyCount = spyCountFor(players.size)
+        val defaultSpies = spyCountFor(players.size)
+        val maxAllowedSpies = (players.size - 1).coerceAtLeast(1)
+        spyCount = config.customSpyCount?.coerceIn(1, maxAllowedSpies) ?: defaultSpies
 
         // Shuffle roles
         val shuffledIndices = players.indices.shuffled()

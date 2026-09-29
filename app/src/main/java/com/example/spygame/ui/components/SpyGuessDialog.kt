@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.spygame.model.LocationCategory
 import com.example.spygame.ui.theme.*
 
@@ -43,13 +44,15 @@ fun SpyGuessDialog(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss
+    ) {
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = SpyBg,
             border = androidx.compose.foundation.BorderStroke(1.dp, SpyLine),
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth(0.92f)
                 .fillMaxHeight(0.85f)
                 .testTag("spy_guess_dialog")
         ) {

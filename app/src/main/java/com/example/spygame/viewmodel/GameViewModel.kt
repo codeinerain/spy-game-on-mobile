@@ -3,6 +3,7 @@ package com.example.spygame.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.spygame.data.LocationRepository
+import com.example.spygame.engine.BotIntelligence
 import com.example.spygame.engine.SpyGameEngine
 import com.example.spygame.model.*
 import kotlinx.coroutines.Job
@@ -20,6 +21,8 @@ data class GameUiState(
     val isPassAndPlay: Boolean = true,
     val isSoloPractice: Boolean = false,
     val players: List<Player> = emptyList(),
+    val playerCountInput: Int = 4,
+    val spyCountInput: Int = 1,
     val config: GameConfig = GameConfig(),
     val currentRoleRevealIndex: Int = 0,
     val isDossierRevealed: Boolean = false,
@@ -89,22 +92,51 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    fun startPassAndPlay() {
-        _uiState.update { it.copy(isPassAndPlay = true, isSoloPractice = false) }
+    fun setPlayerCount(count: Int) {
+        val clampedPlayers = count.coerceIn(GameLimits.MIN_PLAYERS, GameLimits.MAX_PLAYERS)
+        val maxSpies = (clampedPlayers - 1).coerceAtLeast(1)
+        val currentSpies = _uiState.value.spyCountInput.coerceIn(1, maxSpies)
+        _uiState.update { it.copy(playerCountInput = clampedPlayers, spyCountInput = currentSpies) }
+        engine.config = engine.config.copy(customSpyCount = currentSpies)
+        engine.setRosterSize(clampedPlayers, _uiState.value.isSoloPractice)
+        syncWithEngine()
+    }
+
+    fun setSpyCount(count: Int) {
+        val maxSpies = (_uiState.value.playerCountInput - 1).coerceAtLeast(1)
+        val clampedSpies = count.coerceIn(1, maxSpies)
+        _uiState.update { it.copy(spyCountInput = clampedSpies) }
+        engine.config = engine.config.copy(customSpyCount = clampedSpies)
+        syncWithEngine()
+    }
+
+    fun setGameMode(isSolo: Boolean) {
+        _uiState.update { it.copy(isSoloPractice = isSolo, isPassAndPlay = !isSolo) }
+        engine.setRosterSize(_uiState.value.playerCountInput, isSolo = isSolo)
+        syncWithEngine()
+    }
+
+    fun startDirectRound() {
+        engine.setRosterSize(_uiState.value.playerCountInput, _uiState.value.isSoloPractice)
+        engine.config = engine.config.copy(customSpyCount = _uiState.value.spyCountInput)
+        startRound()
+    }
+
+    fun openLobbyFromMenu() {
+        engine.setRosterSize(_uiState.value.playerCountInput, _uiState.value.isSoloPractice)
+        engine.config = engine.config.copy(customSpyCount = _uiState.value.spyCountInput)
         engine.phase = Phase.LOBBY
         syncWithEngine()
     }
 
+    fun startPassAndPlay() {
+        setGameMode(isSolo = false)
+        openLobbyFromMenu()
+    }
+
     fun startSoloPractice() {
-        _uiState.update { it.copy(isPassAndPlay = false, isSoloPractice = true) }
-        // Ensure 1 human + 3 bots
-        engine.players.clear()
-        engine.players.add(Player(id = UUID.randomUUID().toString(), name = "Вы", avatar = "🦊", isHost = true, ready = true))
-        engine.players.add(Player(id = UUID.randomUUID().toString(), name = "Агент 007", avatar = "🕶️", isBot = true, ready = true))
-        engine.players.add(Player(id = UUID.randomUUID().toString(), name = "Шерлок", avatar = "🔍", isBot = true, ready = true))
-        engine.players.add(Player(id = UUID.randomUUID().toString(), name = "Панда", avatar = "🐼", isBot = true, ready = true))
-        engine.phase = Phase.LOBBY
-        syncWithEngine()
+        setGameMode(isSolo = true)
+        openLobbyFromMenu()
     }
 
     fun showRules() {
@@ -175,14 +207,19 @@ class GameViewModel : ViewModel() {
         _uiState.update { it.copy(isDossierRevealed = !it.isDossierRevealed) }
     }
 
+    fun setDossierRevealed(revealed: Boolean) {
+        _uiState.update { it.copy(isDossierRevealed = revealed) }
+    }
+
     fun nextPlayerReveal() {
+        val humanPlayers = engine.players.filter { !it.isBot }
         val nextIdx = _uiState.value.currentRoleRevealIndex + 1
-        if (nextIdx < engine.players.size) {
+        if (nextIdx < humanPlayers.size) {
             _uiState.update { it.copy(currentRoleRevealIndex = nextIdx, isDossierRevealed = false) }
         } else {
-            // All players viewed role, begin game!
+            // All human players viewed their own confidential role, begin game!
             engine.beginPlaying()
-            _uiState.update { it.copy(isDossierRevealed = false) }
+            _uiState.update { it.copy(currentRoleRevealIndex = 0, isDossierRevealed = false) }
             syncWithEngine()
             startTimers()
             triggerBotActionIfNeeded()
@@ -353,28 +390,16 @@ class GameViewModel : ViewModel() {
             val target = engine.players.find { it.id == engine.currentTargetId }
 
             if (engine.turnStage == TurnStage.ASKING && asker?.isBot == true) {
-                // Bot asks question
+                // Bot asks intelligent question tailored to the secret location or spy fishing
                 val candidates = engine.players.filter { it.isActive && it.id != asker.id }
                 val chosenTarget = candidates.randomOrNull() ?: return@launch
-                val sampleQuestions = listOf(
-                    "Часто ли ты бываешь в таких местах?",
-                    "Что ты обычно надеваешь туда?",
-                    "Там тепло или холодно?",
-                    "Много ли там незнакомых людей?",
-                    "Нужны ли там специальные навыки?",
-                    "Ты бы порекомендовал это место друзьям?"
-                )
-                askQuestion(chosenTarget.id, sampleQuestions.random())
+                val question = BotIntelligence.generateQuestion(asker, chosenTarget, engine.currentLocation)
+                askQuestion(chosenTarget.id, question)
             } else if (engine.turnStage == TurnStage.ANSWERING && target?.isBot == true) {
-                // Bot answers question
-                val sampleAnswers = listOf(
-                    "Да, вполне привычно для меня.",
-                    "Не скажу, что часто, но бывал.",
-                    "Обычно одеваются удобно и практично.",
-                    "Там довольно шумно и оживлённо.",
-                    "Всё зависит от времени суток и компании."
-                )
-                answerQuestion(sampleAnswers.random())
+                // Bot answers question intelligently based on role & actual location
+                val incomingQuestion = engine.currentQuestionText ?: ""
+                val answer = BotIntelligence.generateAnswer(target, incomingQuestion, engine.currentLocation)
+                answerQuestion(answer)
             }
         }
     }

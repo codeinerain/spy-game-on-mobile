@@ -2,6 +2,7 @@ package com.example.spygame.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -52,10 +53,14 @@ fun GameScreen(
     onCloseSpyGuessDialog: () -> Unit,
     onConfirmSpyGuess: (location: String) -> Unit,
     onStartVoting: () -> Unit,
+    currentLocation: LocationItem? = null,
+    isSoloMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val currentAsker = players.find { it.id == currentAskerId }
     val currentTarget = players.find { it.id == currentTargetId }
+
+    var showMyRoleDialog by remember { mutableStateOf(false) }
 
     val logListState = rememberLazyListState()
 
@@ -76,6 +81,51 @@ fun GameScreen(
                 .fillMaxSize()
                 .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
+            // Top Status Bar with Secret Role Peek
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "РАУНД В ПРОЦЕССЕ",
+                    color = SpyMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = SpyPanel2,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SpyLine),
+                    modifier = Modifier
+                        .clickable { showMyRoleDialog = true }
+                        .testTag("peek_my_role_button")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = SpyAmber,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Моё досье",
+                            color = SpyText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
             // Timers
             TimerDisplay(
                 roundSecondsRemaining = roundSecondsRemaining,
@@ -422,6 +472,186 @@ fun GameScreen(
                 onDismiss = onCloseSpyGuessDialog,
                 onConfirmGuess = onConfirmSpyGuess
             )
+        }
+
+        // Confidential Role Peek Dialog (strictly private for the current user)
+        if (showMyRoleDialog) {
+            val humanPlayers = players.filter { !it.isBot }
+            var selectedPlayerId by remember {
+                mutableStateOf(
+                    if (isSoloMode) (humanPlayers.firstOrNull()?.id ?: players.first().id)
+                    else (currentAsker?.id ?: humanPlayers.firstOrNull()?.id ?: players.first().id)
+                )
+            }
+            var isRevealedInDialog by remember { mutableStateOf(false) }
+
+            val inspectedPlayer = players.find { it.id == selectedPlayerId }
+
+            androidx.compose.ui.window.Dialog(onDismissRequest = { showMyRoleDialog = false }) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = SpyBg,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SpyAmber),
+                    modifier = Modifier
+                        .fillMaxWidth(0.92f)
+                        .testTag("my_dossier_dialog")
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Security, contentDescription = null, tint = SpyAmber, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Секретное досье",
+                                    color = SpyAmber,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            IconButton(onClick = { showMyRoleDialog = false }) {
+                                Icon(Icons.Default.Close, contentDescription = "Закрыть", tint = SpyMuted)
+                            }
+                        }
+
+                        if (!isSoloMode && humanPlayers.size > 1 && !isRevealedInDialog) {
+                            Text(
+                                text = "Выберите своё имя:",
+                                color = SpyMuted,
+                                fontSize = 13.sp,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            androidx.compose.foundation.lazy.LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(humanPlayers) { p ->
+                                    val isSelected = p.id == selectedPlayerId
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = if (isSelected) SpyAccent else SpyPanel,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) SpyAccent else SpyLine),
+                                        modifier = Modifier.clickable { selectedPlayerId = p.id }
+                                    ) {
+                                        Text(
+                                            text = "${p.avatar} ${p.name}",
+                                            color = if (isSelected) SpyAccentInk else SpyText,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
+                        }
+
+                        if (!isRevealedInDialog) {
+                            Text(
+                                text = "⚠️ Убедитесь, что никто не смотрит в экран!",
+                                color = SpyDanger,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Button(
+                                onClick = { isRevealedInDialog = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SpyAmber,
+                                    contentColor = SpyAccentInk
+                                )
+                            ) {
+                                Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Показать мою роль",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
+                                )
+                            }
+                        } else {
+                            // Revealed role for this player ONLY
+                            if (inspectedPlayer?.role == Role.SPY) {
+                                Text(
+                                    text = "🕵️ ВЫ ШПИОН!",
+                                    color = SpyAmber,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Black,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Ваша задача — выяснить секретную локацию по вопросам других игроков или угадать её!",
+                                    color = SpyText,
+                                    fontSize = 14.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            } else {
+                                Text(
+                                    text = "СЕКРЕТНАЯ ЛОКАЦИЯ:",
+                                    color = SpyMuted,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = currentLocation?.name ?: "Неизвестно",
+                                    color = SpyOk,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Black,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Вы мирный житель. Задавайте вопросы, чтобы вычислить шпиона!",
+                                    color = SpyText,
+                                    fontSize = 14.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Button(
+                                onClick = {
+                                    isRevealedInDialog = false
+                                    showMyRoleDialog = false
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SpyPanel2,
+                                    contentColor = SpyText
+                                )
+                            ) {
+                                Icon(Icons.Default.VisibilityOff, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Скрыть досье",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

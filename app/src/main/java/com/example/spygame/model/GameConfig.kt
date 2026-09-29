@@ -11,7 +11,8 @@ data class GameConfig(
     val maxVoteAttempts: Int = 2,
     val allowAssociations: Boolean = true,
     val packId: String = "default",
-    val enabledCategoryIds: Set<String> = emptySet() // empty means all categories enabled
+    val enabledCategoryIds: Set<String> = emptySet(), // empty means all categories enabled
+    val customSpyCount: Int? = null
 )
 
 object ConfigOptions {
